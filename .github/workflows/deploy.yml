@@ -23,8 +23,8 @@ jobs:
 
       - name: Build and push Docker image
         run: |
-          docker build -t aiyus1/fastapi-app .
-          docker push aiyus1/fastapi-app
+          docker build -t adenijifisayo740/fastapi-app .
+          docker push adenijifisayo740/fastapi-app
 
       - name: Deploy to server
         run: |
