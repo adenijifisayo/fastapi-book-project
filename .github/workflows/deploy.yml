@@ -30,9 +30,23 @@ jobs:
         run: |
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > private_key && chmod 600 private_key
           ssh -o StrictHostKeyChecking=no -i private_key ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+            # Ensure dependencies are up-to-date
+            sudo apt update -y
+            sudo apt install -y docker-ce docker-ce-cli containerd.io
+
+            # Pull latest changes from GitHub
+            cd /home/${{ secrets.SERVER_USER }}/myfastapi-book-project
+            git fetch origin main
+            git reset --hard origin/main
+
+            # Pull the latest Docker image
             docker pull adenijifisayo740/fastapi-app:latest
+
+            # Stop and remove old container if it exists
             docker stop fastapi-app || true
             docker rm fastapi-app || true
-            docker run -d -p 8000:8000 --name fastapi-app aiyus1/fastapi-app:latest
+
+            # Run the new container
+            docker run -d -p 8000:8000 --name fastapi-app adenijifisayo740/fastapi-app:latest
           EOF
           rm -f private_key
