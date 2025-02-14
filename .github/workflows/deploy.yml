@@ -1,15 +1,31 @@
-      - name: Deploy application
+name: Deploy FastAPI Project
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy Application
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_KEY }}
+          PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          HOST_NAME: ${{ secrets.HOST_NAME }}
+          USER_NAME: ${{ secrets.USER_NAME }}
         run: |
-          mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@13.244.107.173 << 'EOF'
-          cd ~/fastapi-book-project
-          git pull origin main
-          source venv/bin/activate
-          pip install -r requirements.txt
-          sudo systemctl restart fastapi
-          sudo systemctl is-active --quiet fastapi || (echo "FastAPI service failed to start!" && exit 1)
+          echo "$PRIVATE_KEY" > privatekey.pem
+          chmod 600 privatekey.pem
+
+          trap "rm -f privatekey.pem" EXIT
+
+          ssh -o StrictHostKeyChecking=no -i privatekey.pem ${USER_NAME}@${HOST_NAME} << 'EOF'
+            cd ~/fastapi-book-project
+            git fetch origin main
+            git reset --hard origin/main
+            source venv/bin/activate
+            pip install -r requirements.txt
+            sudo service fastapi restart
+            sudo service nginx restart
           EOF
