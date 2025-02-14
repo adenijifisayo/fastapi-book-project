@@ -1,52 +1,26 @@
-name: Deploy FastAPI App
-
-on:
-  push:
-    branches:
-      - main
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.10"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
       - name: Deploy application
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_KEY }}
         run: |
-          # SSH into the server and deploy
-          ssh -o StrictHostKeyChecking=no ubuntu@your-server-ip << 'EOF'
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@13.244.107.173 << 'EOF'
           cd ~/fastapi-book-project
           git pull origin main
           source venv/bin/activate
           pip install -r requirements.txt
           sudo systemctl restart fastapi
-          
-          # Ensure the service is active and running
           sudo systemctl is-active --quiet fastapi || (echo "FastAPI service failed to start!" && exit 1)
+          
+          # Wait for FastAPI to fully restart
+          sleep 5
+
+          # Check if /stage2 endpoint is returning 200
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/stage2)
+          if [ "$RESPONSE" -ne 200 ]; then
+              echo "❌ Stage 2 endpoint is not returning 200 OK (Got $RESPONSE)"
+              exit 1
+          fi
+          echo "✅ Stage 2 endpoint is active and returning 200 OK!"
           EOF
-
-      - name: Verify Deployment
-        run: |
-          for i in {1..10}; do  # Try 10 times before failing
-            STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://your-server-ip:8000/stage2)
-            if [ "$STATUS_CODE" -eq 200 ]; then
-              echo "✅ Stage2 endpoint is working!"
-              exit 0
-            fi
-            sleep 1  # Wait 1 second before retrying
-          done
-
-          echo "❌ ERROR: /stage2 endpoint did not return 200 OK!"
-          exit 1
