@@ -1,55 +1,30 @@
-name: CD Pipeline
+name: Deploy FastAPI Project
+
 on:
   push:
-    branches: [main]
+    branches:
+      - main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      - name: Deploy Application
+        env:
+          PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          HOST_NAME: ${{ secrets.SERVER_IP }}
+          USER_NAME: ${{ secrets.SERVER_USER }}
+        run: |
+          echo "$PRIVATE_KEY" > privatekey.pem
+          chmod 600 privatekey.pem
 
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.SERVER_IP }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            # Update package index and install dependencies
-            sudo apt-get update -y
-            sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
+          trap "rm -f privatekey.pem" EXIT
 
-            # Add Docker's official GPG key
-            curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-            sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
-
-            # Install Docker
-            sudo apt-get update -y
-            sudo apt-get install -y docker-ce docker-ce-cli containerd.io
-
-            # Add the SSH user to the Docker group
-            sudo usermod -aG docker ${{ secrets.SERVER_USER }}
-
-            # Install Docker Compose
-            sudo curl -L "https://github.com/docker/compose/releases/download/v2.20.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-            sudo chmod +x /usr/local/bin/docker-compose
-
-            # Verify installations
-            docker --version
-            docker-compose --version
-
-            # Free up port 80
-            sudo fuser -k 80/tcp
-
-            # Navigate to the project directory and deploy
-            git clone https://github.com/adenijifisayo/fastapi-book-project.git
-            cd /home/ubuntu/
-            cd fastapi-book-project/
-            git fetch origin main
-            git reset --hard origin/main
-
-            # Build and run the container
-            sudo docker build -t adenijifisayo740/fastapi-app .
-            sudo docker run -d -p 8000:8000 --name fastapi-app adenijifisayo740/fastapi-app:latest
+          ssh -o StrictHostKeyChecking=no -i privatekey.pem ${USER_NAME}@${HOST_NAME} << 'EOF'
+            cd ~/fastapi-book-project
+            git pull origin main
+            source venv/bin/activate
+            pip install --no-cache-dir -r requirements.txt
+            sudo systemctl restart fastapi
+            sudo systemctl restart nginx
+          EOF
