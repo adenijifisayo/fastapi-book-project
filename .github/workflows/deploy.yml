@@ -42,8 +42,10 @@ jobs:
             sudo fuser -k 80/tcp
 
             # Navigate to the project directory and deploy
-            git clone https://github.com/adenijifisayo/fastapi-book-project.git
-            cd /home/ubuntu/
+            cd /home/${{ secrets.SSH_USERNAME }}/
+            if [ ! -d "fastapi-book-project" ]; then
+              git clone https://github.com/adenijifisayo/fastapi-book-project.git
+            fi
             cd fastapi-book-project/
             git fetch origin main
             git reset --hard origin/main
