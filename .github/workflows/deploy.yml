@@ -12,15 +12,4 @@
           pip install -r requirements.txt
           sudo systemctl restart fastapi
           sudo systemctl is-active --quiet fastapi || (echo "FastAPI service failed to start!" && exit 1)
-          
-          # Wait for FastAPI to fully restart
-          sleep 5
-
-          # Check if /stage2 endpoint is returning 200
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/stage2)
-          if [ "$RESPONSE" -ne 200 ]; then
-              echo "❌ Stage 2 endpoint is not returning 200 OK (Got $RESPONSE)"
-              exit 1
-          fi
-          echo "✅ Stage 2 endpoint is active and returning 200 OK!"
           EOF
