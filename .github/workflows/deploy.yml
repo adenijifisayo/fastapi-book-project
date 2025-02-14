@@ -1,51 +1,50 @@
-name: Deploy FastAPI Project
-
 on:
   push:
-    branches:
-      - main
-
+    branches: [main]
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-      - name: Setup SSH Key and Deploy
-        env:
-          PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          HOST_NAME: ${{ secrets.HOST_NAME }}
-          USER_NAME: ${{ secrets.USER_NAME }}
-        run: |
-          # Save the private key securely
-          echo "$PRIVATE_KEY" | tr -d '\r' > privatekey.pem
-          chmod 600 privatekey.pem
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            # Update package index and install dependencies
+            sudo apt-get update -y
+            sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
 
-          # Test SSH Connection Before Deployment
-          ssh -o StrictHostKeyChecking=no -i privatekey.pem ${USER_NAME}@${HOST_NAME} "echo '✅ SSH Connected Successfully'"
+            # Add Docker's official GPG key
+            curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+            sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
 
-          # Deploying the FastAPI app
-          ssh -o StrictHostKeyChecking=no -i privatekey.pem ${USER_NAME}@${HOST_NAME} << 'EOF'
-            cd ~/fastapi-book-project
+            # Install Docker
+            sudo apt-get update -y
+            sudo apt-get install -y docker-ce docker-ce-cli containerd.io
 
-            # Fetch latest changes and hard reset to match remote branch
+            # Add the SSH user to the Docker group
+            sudo usermod -aG docker ${{ secrets.SSH_USERNAME }}
+
+            # Install Docker Compose
+            sudo curl -L "https://github.com/docker/compose/releases/download/v2.20.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+            sudo chmod +x /usr/local/bin/docker-compose
+
+            # Verify installations
+            docker --version
+            docker-compose --version
+
+            # Free up port 80
+            sudo fuser -k 80/tcp
+
+            # Navigate to the project directory and deploy
+            git clone https://github.com/adenijifisayo/fastapi-book-project.git
+            cd /home/ubuntu/
+            cd fastapi-book-project/
             git fetch origin main
             git reset --hard origin/main
-
-            source venv/bin/activate
-            pip install -r requirements.txt
-            sudo service fastapi restart
-            sudo service nginx restart
-
-            # Wait for FastAPI to start properly
-            sleep 5
-
-            # Check if /stage2 endpoint returns 200 OK
-            RESPONSE=\$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/stage2)
-            if [ "\$RESPONSE" -ne 200 ]; then
-                echo "❌ Stage2 endpoint failed! Got HTTP \$RESPONSE"
-                exit 1
-            fi
-            echo "✅ Stage2 endpoint is working correctly!"
-          EOF
+            sudo docker-compose up -d --build
